@@ -1,0 +1,4 @@
+
+class NotRegisteredBackendError(Exception):
+    pass
+
