@@ -1,4 +1,4 @@
-from typing import List, ParamSpec, Tuple, Type, TypeVar, Union
+from typing import List, ParamSpec, Tuple, TypeVar, Union
 
 from openai.types import CompletionUsage
 from openai.types.chat import (
@@ -21,7 +21,7 @@ class MetaInfo(BaseModel):
     error: str | None = None
     original_result: ChatCompletion | ChatCompletionChunk | None = None
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         repr_str = "== MetaInfo ==\n"
         repr_str += f"request_id: {self.request_id}\n"
         repr_str += f"success: {self.success}\n"
@@ -62,7 +62,7 @@ P = ParamSpec("P")  # 参数规范
 
 class GuidedDecodeConfig(BaseModel):
     # 提供 basemodel 或者 JSON schema
-    base_model: Type[GuidedBaseModel] | dict
+    base_model: type[GuidedBaseModel] | dict
     use_list: bool = False
 
     # 允许用户自定义的参数

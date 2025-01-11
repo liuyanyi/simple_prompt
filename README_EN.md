@@ -1,43 +1,43 @@
 # Simple Prompt
 
-[English](README_EN.md) | 简体中文
+[简体中文](README.md) | English
 
-一个简单的 LLM prompt 调用包装器。
+A simple LLM prompt wrapper.
 
-## 主要针对问题
+## Key Features
 
-1. 提示词通常是字符串拼接，不方便维护，没有代码提示和类型检查。 -> 通过将提示封装成一个函数，可以更好的维护和调用。
-2. openai 客户端的返回结果需要用 `result.choices[0].message.content` 调用，很烦。 -> 返回元组，第一个元素是结果，第二个元素是元信息。
-3. 通常需要线程池进行并发调用。 -> Backend 内置线程池，通过execute_in_thread方法返回future。
+1. Prompt strings are usually concatenated, making them hard to maintain and lacking code hints and type checking. -> By wrapping prompts as functions, they become more maintainable and callable.
+2. OpenAI client's return results require `result.choices[0].message.content` calls, which is cumbersome. -> Returns a tuple with the result as the first element and metadata as the second.
+3. Thread pools are often needed for concurrent calls. -> Backend has built-in thread pool, returns future through execute_in_thread method.
 
-## 安装
+## Installation
 
 ```bash
 pip install simple-prompt
 ```
 
-## 快速开始
+## Quick Start
 
-宗旨是通过定义python方法来定义各类提示拼装逻辑，然后通过装饰器的方式调用LLMs。
+The principle is to define prompt assembly logic through Python methods and call LLMs through decorators.
 
-执行器的返回值是一个元组，第一个元素是返回的结果，第二个元素是元信息。
+The executor returns a tuple where the first element is the result and the second element is the metadata.
 
-在结构化生成的情况下，可以通过 `base_model` 参数指定返回的数据结构。
+For structured generation, you can specify the return data structure through the `base_model` parameter.
 
-### 基础调用示例
+### Basic Call Example
 
 ```python
 @prompt()
 def translate(text: str, target_language: str = "Chinese"):
     return f"Please translate the following text into {target_language}: \n{text}"
 
-# 直接调用执行
+# Direct execution
 result, meta = translate(text="I want to learn AI").execute()
 # result -> str
 # meta -> MetaInfo
 ```
 
-### 消息格式调用
+### Message Format Call
 
 ```python
 @prompt()
@@ -53,11 +53,11 @@ def translate_in_msg_format(text: str, target_language: str = "Chinese"):
         },
     ]
 
-# 支持配置采样参数
+# Supports sampling parameter configuration
 result, meta = translate_in_msg_format(text="Hello World").configure(top_p=0.5).execute()
 ```
 
-### 结构化数据返回
+### Structured Data Return
 
 ```python
 from pydantic import BaseModel
@@ -72,14 +72,14 @@ def translate_into_json_format(text: str, target_language: str = "Chinese"):
     return result in JSON format: {TranslationResult.model_json_schema()}
     Text: {text}"""
 
-# 支持结构化数据返回
+# Supports structured data return
 result, meta = translate_into_json_format(
     text="Hello, how are you?"
 ).execute(base_model=TranslationResult, use_list=False)
 # result -> TranslationResult
 ```
 
-## 配置后端
+## Configure Backend
 
 ```python
 from simple_prompt.backend import vLLMBackend, register_backend, set_default_backend
@@ -96,10 +96,9 @@ backend = vLLMBackend(
 register_backend(backend=backend)
 set_default_backend("vllm")
 
-# 后续可以在 prompt 装饰器中指定 backend 参数
+# You can specify the backend parameter in the prompt decorator later
 ```
 
-## 许可证
+## License
 
 Apache-2.0 License
-

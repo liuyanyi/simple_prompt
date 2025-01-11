@@ -3,7 +3,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 import logging
 from typing import Generator, List
 
-from ..protocol import (
+from simple_prompt.protocol import (
     MetaInfo,
     message_type,
     output_type,
@@ -101,6 +101,26 @@ class BaseLLMBackend(ABC):
         generation_config: dict | None = None,
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> "output_type":
+        raise NotImplementedError
+    
+    @abstractmethod
+    async def async_chat(
+        self,
+        messages: message_type,
+        request_id: str = None,
+        generation_config: dict | None = None,
+        guided_decode_config: GuidedDecodeConfig | None = None,
+    ) -> "Future[output_type|exception_output_type]":
+        raise NotImplementedError
+    
+    @abstractmethod
+    async def async_chat_stream(
+        self,
+        messages: message_type,
+        request_id: str = None,
+        generation_config: dict | None = None,
+        guided_decode_config: GuidedDecodeConfig | None = None,
+    ) -> "Future[Generator[raw_output_type|exception_output_type]]":
         raise NotImplementedError
 
     def _hooks_on_request_start(

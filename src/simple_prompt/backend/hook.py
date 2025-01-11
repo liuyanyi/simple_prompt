@@ -1,14 +1,16 @@
 import logging
-from ..protocol import MetaInfo
-from ..utils import beautify_time
+
+from simple_prompt.protocol import MetaInfo
+from simple_prompt.utils import beautify_time
+
 from .base import LLMBackendHook
 
 
-class DebugLoggingHook(LLMBackendHook):
-    HOOK_NAME = "DebugLoggingHook"
+class LoggingHook(LLMBackendHook):
+    HOOK_NAME = "LoggingHook"
 
-    def __init__(self, logger=None):
-        self.logger = logger or logging.getLogger(__name__)
+    def __init__(self, print_fn=None):
+        self.print_fn = print_fn or print
 
     def on_request_start(
         self,
@@ -23,10 +25,10 @@ class DebugLoggingHook(LLMBackendHook):
             if msgs:
                 msgs_strs = []
                 for msg in msgs:
-                    msgs_strs.append(f'<{msg["role"]}> {msg["content"]}')
+                    msgs_strs.append(f"<{msg['role']}> {msg['content']}")
                 debug_str = "\n".join(
                     [
-                        "DEBUG DETAILED INFO",
+                        "== Request Start ==",
                         "Request id: " + request_id,
                         "Model: " + display_name,
                         "Start time: " + beautify_time(start_time),
@@ -34,7 +36,7 @@ class DebugLoggingHook(LLMBackendHook):
                         *msgs_strs,
                     ]
                 )
-                self.logger.debug(debug_str)
+                self.print_fn(debug_str)
 
     def on_request_end(
         self,
@@ -47,7 +49,7 @@ class DebugLoggingHook(LLMBackendHook):
         if meta.request_id is not None:
             debug_str = "\n".join(
                 [
-                    "DEBUG DETAILED INFO",
+                    "== Request End ==",
                     "Request id: " + meta.request_id,
                     "Model: " + display_name,
                     "Start time: " + beautify_time(meta.start_time),
@@ -56,4 +58,4 @@ class DebugLoggingHook(LLMBackendHook):
                     "Response: " + str(raw_output),
                 ]
             )
-            self.logger.debug(debug_str)
+            self.print_fn(debug_str)

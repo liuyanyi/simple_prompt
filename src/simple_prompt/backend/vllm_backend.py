@@ -3,7 +3,7 @@ import inspect
 
 import openai
 
-from ..protocol import (
+from simple_prompt.protocol import (
     GuidedDecodeConfig,
     message_type,
 )

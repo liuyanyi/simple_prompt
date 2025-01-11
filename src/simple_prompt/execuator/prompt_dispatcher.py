@@ -1,10 +1,12 @@
 import re
-from functools import lru_cache, wraps
+from functools import lru_cache
 from typing import Any, Callable, Dict, List, Literal, Tuple, Type, overload
 
-from .backend import get_default_llm_backend_name
-from .execuator import ExecutorMixin, PromptExecutor
-from .protocol import GuidedBaseModel, MetaInfo, P, R
+from simple_prompt.backend import get_default_backend_name
+from simple_prompt.protocol import GuidedBaseModel, MetaInfo, P
+
+from .base import ExecutorMixin
+from .prompt_execuator import PromptExecutor
 
 
 class PromptDispatcher(ExecutorMixin):
@@ -29,7 +31,7 @@ class PromptDispatcher(ExecutorMixin):
         self.func_kwagrs = func_kwagrs
 
         if default_backend == "default":
-            default_backend = get_default_llm_backend_name()
+            default_backend = get_default_backend_name()
             if default_backend is None:
                 raise ValueError("default backend not set")
         matched_rule = self._match_rule(default_backend)
@@ -77,7 +79,7 @@ class PromptDispatcher(ExecutorMixin):
     ):
         if backend is not None:
             if backend == "default":
-                backend_name = get_default_llm_backend_name()
+                backend_name = get_default_backend_name()
             else:
                 backend_name = backend
             matched_rule = self._match_rule(backend_name)
@@ -202,7 +204,7 @@ class PromptDispatcher(ExecutorMixin):
             result (Tuple[str | GuidedBaseModel | List[GuidedBaseModel], MetaInfo]): 返回结果和元信息
         """
         if self.selected_backend == "default":
-            selected_backend_name = get_default_llm_backend_name()
+            selected_backend_name = get_default_backend_name()
             matched_rule = self._match_rule(selected_backend_name)
             if matched_rule is not None:
                 self.selected_backend = selected_backend_name
@@ -228,23 +230,3 @@ class PromptDispatcher(ExecutorMixin):
             request_id=request_id,
         )
 
-
-def prompt_dispatcher(
-    rule: Dict[str, Callable[P, PromptExecutor]],
-    default_backend: str = "default",
-    fallback: Callable[P, PromptExecutor] = None,
-):
-    def decorator(func: Callable[P, R]) -> Callable[P, PromptDispatcher]:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> PromptDispatcher:
-            return PromptDispatcher(
-                rule,
-                default_backend=default_backend,
-                fallback=fallback,
-                func_args=args,
-                func_kwagrs=kwargs,
-            )
-
-        return wrapper
-
-    return decorator

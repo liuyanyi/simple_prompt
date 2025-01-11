@@ -1,10 +1,14 @@
-from abc import ABC, abstractmethod
 from concurrent.futures import Future
-from functools import wraps
-from typing import Any, Callable, Dict, List, Literal, Tuple, Type, TypeVar, overload
+from typing import Any, Callable, Dict, List, Literal, Tuple, Type, overload
 
-from ..backend import get_backend
-from ..protocol import GuidedBaseModel, GuidedDecodeConfig, MetaInfo, P, R, message_type
+from simple_prompt.backend import get_backend
+from simple_prompt.protocol import (
+    GuidedBaseModel,
+    GuidedDecodeConfig,
+    MetaInfo,
+    message_type,
+)
+
 from .base import ExecutorMixin
 
 
@@ -105,12 +109,12 @@ class PromptExecutor(ExecutorMixin):
 
     def _prepare_input(
         self,
-        base_model: Type[GuidedBaseModel] | None = None,
+        base_model: Type[GuidedBaseModel] | dict | None = None,
         use_list: bool = False,
         request_id: str | None = None,
     ):
         guided_decode_config = None
-        if base_model:
+        if base_model is not None:
             # build guided_decode_config
             guided_decode_config = GuidedDecodeConfig(
                 base_model=base_model,
@@ -133,20 +137,36 @@ class PromptExecutor(ExecutorMixin):
         else:
             return prompt_or_messages
 
-    @overload
-    def execute(self, request_id: str | None = None) -> Tuple[str, MetaInfo]:
-        """调用模型，并返回结果和元信息
+
+    def execute(self, request_id: str | None = None):
+        """调用模型
+
+        - 如果没有入参，直接返回结果
+        - 如果 base_model 有值，解析结果为给定的BaseModel类型
+        - 如果 base_model 有值且 use_list 为 True，解析结果为给定的BaseModel类型数组
 
         Args:
+            base_model (Type[GuidedBaseModel], optional): BaseModel的子类. Defaults to None.
+            use_list (bool, optional): 是否返回列表. Defaults to False.
             request_id (str | None, optional): 请求ID(可选). Defaults to None.
 
         Returns:
-            result (Tuple[str, MetaInfo]): 返回结果和元信息
+            result (Tuple[str | GuidedBaseModel | List[GuidedBaseModel], MetaInfo]): 返回结果和元信息
         """
-        ...
+        request_id, messages, sampling_params, _ = self._prepare_input(
+            request_id=request_id
+        )
+
+        result = self.backend.chat(
+            messages=messages,
+            request_id=request_id,
+            generation_config=sampling_params,
+            guided_decode_config=None,
+        )
+        return result
 
     @overload
-    def execute(
+    def parse(
         self,
         base_model: Type[GuidedBaseModel],
         use_list: Literal[False] = False,
@@ -164,7 +184,43 @@ class PromptExecutor(ExecutorMixin):
         """
 
     @overload
-    def execute(
+    def parse(
+        self,
+        base_model: dict,
+        use_list: Literal[True] = True,
+        request_id: str | None = None,
+    ) -> Tuple[List[dict], MetaInfo]:
+        """调用模型，并解析结果为给定的BaseModel类型数组，返回结果和元信息
+
+        Args:
+            base_model (dict): JSON schema
+            use_list (bool, optional): 是否返回列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Tuple[List[dict], MetaInfo]): 解析后的结果和元信息
+        """
+
+    @overload
+    def parse(
+        self,
+        base_model: dict,
+        use_list: Literal[False] = False,
+        request_id: str | None = None,
+    ) -> Tuple[dict, MetaInfo]:
+        """调用模型，并解析结果为给定的BaseModel类型，返回结果和元信息
+
+        Args:
+            base_model (dict): JSON schema
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Tuple[dict, MetaInfo]): 解析后的结果和元信息
+        """
+
+    @overload
+    def parse(
         self,
         base_model: Type[GuidedBaseModel],
         use_list: Literal[True] = True,
@@ -181,25 +237,21 @@ class PromptExecutor(ExecutorMixin):
             result (Tuple[List[GuidedBaseModel], MetaInfo]): 解析后的结果和元信息
         """
 
-    def execute(
+    def parse(
         self,
-        base_model: Type[GuidedBaseModel] | None = None,
+        base_model: Type[GuidedBaseModel] | dict,
         use_list: bool = False,
         request_id: str | None = None,
     ):
-        """调用模型
-
-        - 如果没有入参，直接返回结果
-        - 如果 base_model 有值，解析结果为给定的BaseModel类型
-        - 如果 base_model 有值且 use_list 为 True，解析结果为给定的BaseModel类型数组
+        """调用模型，并解析结果为给定的BaseModel类型，返回结果和元信息
 
         Args:
-            base_model (Type[GuidedBaseModel], optional): BaseModel的子类. Defaults to None.
-            use_list (bool, optional): 是否返回列表. Defaults to False.
+            base_model (Type[GuidedBaseModel]): BaseModel的子类
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
             request_id (str | None, optional): 请求ID(可选). Defaults to None.
 
         Returns:
-            result (Tuple[str | GuidedBaseModel | List[GuidedBaseModel], MetaInfo]): 返回结果和元信息
+            result (Tuple[GuidedBaseModel, MetaInfo]): 解析后的结果和元信息
         """
         request_id, messages, sampling_params, guided_decode_config = (
             self._prepare_input(
@@ -215,11 +267,11 @@ class PromptExecutor(ExecutorMixin):
         )
         return result
 
-    @overload
-    def execute_in_thread(
+    @overload 
+    def execute_in_future(
         self, request_id: str | None = None
     ) -> Future[Tuple[str, MetaInfo]]:
-        """在线程池中调用模型，并返回 Future 对象
+        """在线程池中调用模型,返回 Future 对象
 
         Args:
             request_id (str | None, optional): 请求ID(可选). Defaults to None.
@@ -229,18 +281,41 @@ class PromptExecutor(ExecutorMixin):
         """
         ...
 
-    @overload
-    def execute_in_thread(
-        self,
-        base_model: Type[GuidedBaseModel] | None = None,
-        use_list: Literal[False] = False,
-        request_id: str | None = None,
-    ) -> Future[Tuple[GuidedBaseModel | List[GuidedBaseModel], MetaInfo]]:
-        """在线程池中调用模型，并返回 Future 对象
+    def execute_in_future(
+        self, request_id: str | None = None
+    ) -> Future[Tuple[str, MetaInfo]]:
+        """在线程池中调用模型,返回 Future 对象
 
         Args:
-            base_model (Type[GuidedBaseModel], optional): BaseModel的子类. Defaults to None.
-            use_list (bool, optional): 是否返回列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Future[Tuple[str, MetaInfo]]): Future 对象
+        """
+        request_id, messages, sampling_params, _ = self._prepare_input(
+            request_id=request_id
+        )
+
+        future = self.backend.chat_in_thread(
+            messages=messages,
+            request_id=request_id,
+            generation_config=sampling_params,
+            guided_decode_config=None,
+        )
+        return future
+
+    @overload
+    def parse_in_future(
+        self,
+        base_model: Type[GuidedBaseModel],
+        use_list: Literal[False] = False,
+        request_id: str | None = None,
+    ) -> Future[Tuple[GuidedBaseModel, MetaInfo]]:
+        """在线程池中调用模型并解析结果,返回 Future 对象
+
+        Args:
+            base_model (Type[GuidedBaseModel]): BaseModel的子类
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
             request_id (str | None, optional): 请求ID(可选). Defaults to None.
 
         Returns:
@@ -249,59 +324,89 @@ class PromptExecutor(ExecutorMixin):
         ...
 
     @overload
-    def execute_in_thread(
+    def parse_in_future(
         self,
-        base_model: Type[GuidedBaseModel] | None = None,
+        base_model: dict,
+        use_list: Literal[True] = True,
+        request_id: str | None = None,
+    ) -> Future[Tuple[List[dict], MetaInfo]]:
+        """在线程池中调用模型并解析结果,返回 Future 对象
+
+        Args:
+            base_model (dict): JSON schema
+            use_list (bool, optional): 是否返回列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Future[Tuple[List[dict], MetaInfo]]): Future 对象
+        """
+        ...
+
+    @overload
+    def parse_in_future(
+        self,
+        base_model: dict,
+        use_list: Literal[False] = False,
+        request_id: str | None = None,
+    ) -> Future[Tuple[dict, MetaInfo]]:
+        """在线程池中调用模型并解析结果,返回 Future 对象
+
+        Args:
+            base_model (dict): JSON schema
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Future[dict, MetaInfo]]): Future 对象
+        """
+        ...
+
+    @overload
+    def parse_in_future(
+        self,
+        base_model: Type[GuidedBaseModel],
         use_list: Literal[True] = True,
         request_id: str | None = None,
     ) -> Future[Tuple[List[GuidedBaseModel], MetaInfo]]:
-        """在线程池中调用模型，并返回 Future 对象
+        """在线程池中调用模型并解析结果,返回 Future 对象
 
         Args:
-            base_model (Type[GuidedBaseModel], optional): BaseModel的子类. Defaults to None.
+            base_model (Type[GuidedBaseModel]): BaseModel的子类
             use_list (bool, optional): 是否返回列表. Defaults to False.
             request_id (str | None, optional): 请求ID(可选). Defaults to None.
 
         Returns:
             result (Future[Tuple[List[GuidedBaseModel], MetaInfo]]): Future 对象
         """
+        ...
 
-    def execute_in_thread(
+    def parse_in_future(
         self,
-        base_model: Type[GuidedBaseModel] | None = None,
+        base_model: Type[GuidedBaseModel] | dict,
         use_list: bool = False,
         request_id: str | None = None,
     ):
-        """在线程池中调用模型
-
-        - 如果没有入参，直接返回结果
-        - 如果 base_model 有值，解析结果为给定的BaseModel类型
-        - 如果 base_model 有值且 use_list 为 True，解析结果为给定的BaseModel类型数组
+        """在线程池中调用模型并解析结果,返回 Future 对象
 
         Args:
-            base_model (Type[GuidedBaseModel], optional): BaseModel的子类. Defaults to None.
-            use_list (bool, optional): 是否返回列表. Defaults to False.
+            base_model (Type[GuidedBaseModel]): BaseModel的子类
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
             request_id (str | None, optional): 请求ID(可选). Defaults to None.
 
         Returns:
-            result (Future[Tuple[str | GuidedBaseModel | List[GuidedBaseModel], MetaInfo]]): Future 对象
+            result (Future[Tuple[GuidedBaseModel | List[GuidedBaseModel], MetaInfo]]): Future 对象
         """
-        messages = self.messages()
-        guided_decode_config = None
-        if base_model:
-            # build guided_decode_config
-            guided_decode_config = GuidedDecodeConfig(
-                base_model=base_model,
-                use_list=use_list,
-            )
+        request_id, messages, sampling_params, guided_decode_config = self._prepare_input(
+            base_model=base_model,
+            use_list=use_list,
+            request_id=request_id
+        )
 
-        future: Future[Tuple[GuidedBaseModel | List[GuidedBaseModel], MetaInfo]] = (
-            self.backend.chat_in_thread(
-                messages=messages,
-                request_id=request_id,
-                generation_config=self.sampling_params,
-                guided_decode_config=guided_decode_config,
-            )
+        future = self.backend.chat_in_thread(
+            messages=messages,
+            request_id=request_id,
+            generation_config=sampling_params,
+            guided_decode_config=guided_decode_config,
         )
         return future
 
@@ -345,86 +450,3 @@ class PromptExecutor(ExecutorMixin):
         ):
             yield response
 
-
-def prompt(
-    *args,
-    default_backend: str = "default",
-    # Sampling parameters
-    temperature: float | None = None,
-    top_p: float | None = None,
-    top_k: int | None = None,
-    presence_penalty: float | None = None,
-    frequency_penalty: float | None = None,
-    repetition_penalty: float | None = None,
-    min_p: float | None = None,
-    stop: str | List[str] | None = None,
-    stop_token_ids: List[int] | None = None,
-    bad_words: List[str] | None = None,
-    ignore_eos: bool | None = None,
-    max_tokens: int | None = None,
-    min_tokens: int | None = None,
-    logprobs: int | None = None,
-    prompt_logprobs: int | None = None,
-    **kwargs: Any,
-):
-
-
-    def decorator(func: Callable[P, R]) -> Callable[P, PromptExecutor]:
-        @wraps(func)
-        def wrapper(*args: Any, **nest_kwargs: Any) -> PromptExecutor:
-            sampling_params = {
-                "temperature": temperature,
-                "top_p": top_p,
-                "top_k": top_k,
-                "presence_penalty": presence_penalty,
-                "frequency_penalty": frequency_penalty,
-                "repetition_penalty": repetition_penalty,
-                "min_p": min_p,
-                "stop": stop,
-                "stop_token_ids": stop_token_ids,
-                "bad_words": bad_words,
-                "ignore_eos": ignore_eos,
-                "max_tokens": max_tokens,
-                "min_tokens": min_tokens,
-                "logprobs": logprobs,
-                "prompt_logprobs": prompt_logprobs,
-            }
-            # 过滤掉None值
-            sampling_params = {
-                k: v for k, v in sampling_params.items() if v is not None
-            }
-            executor = PromptExecutor(
-                backend=default_backend,
-                prompt=None,
-                func=func,
-                func_args=args,
-                func_kwagrs=nest_kwargs,
-                sampling_params=sampling_params,
-                **kwargs,
-            )
-            return executor
-
-        return wrapper
-
-    # if func is not None:
-    #     return decorator(func)
-    # else:
-    #     return decorator
-
-    # if len(args) == 1 and callable(args[0]):
-    #     # 此时没有参数，default_backend是一个函数
-    #     return decorator(args[0])
-    # elif len(args) > 1:
-    #     # 不支持通过 args 传递参数
-    #     raise ValueError(
-    #         "prompt() does not support passing arguments through positional arguments"
-    #     )
-    if len(args) == 1 and callable(args[0]):
-        raise ValueError(
-            "Use @prompt() without parentheses when no arguments are passed"
-        )
-
-    if args:
-        raise ValueError("Use keyword arguments to pass parameters to @prompt()")
-
-    return decorator

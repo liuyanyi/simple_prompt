@@ -97,5 +97,9 @@ def get_backend(backend_name: str = "default") -> BaseLLMBackend:
     return registry.get_backend(backend_name)
 
 
+def get_default_backend_name() -> Optional[str]:
+    return registry.get_default_backend_name()
+
+
 def shutdown():
     registry.shutdown()

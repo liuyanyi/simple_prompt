@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, Literal, Type, TypeVar
 
-from ..protocol import GuidedBaseModel, message_type
+from simple_prompt.protocol import GuidedBaseModel, message_type
 
 ExecutorSelf = TypeVar("ExecutorSelf", bound="ExecutorMixin")
 

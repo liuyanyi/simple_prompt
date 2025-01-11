@@ -1,0 +1,45 @@
+[project]
+name = "simple-prompt"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "liuyanyi", email = "wolfsonliu@163.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.59.6",
+    "pydantic>=2.10.5",
+]
+
+[project.scripts]
+llm-pmt = "simple_prompt:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.0",
+]
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+
+# Assume Python 3.10
+target-version = "py310"
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"

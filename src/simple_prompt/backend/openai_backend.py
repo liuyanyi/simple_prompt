@@ -13,7 +13,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-from ..protocol import (
+from simple_prompt.protocol import (
     GuidedDecodeConfig,
     MetaInfo,
     exception_output_type,
@@ -264,19 +264,28 @@ class OpenAILLMBackend(BaseLLMBackend):
         request_id: str = None,
         generation_config: dict | None = None,
         guided_decode_config: GuidedDecodeConfig | None = None,
+        use_thread_pool: bool = True,
     ):
-        # assert stream is False
-        future = self.chat_in_thread(
-            messages=messages,
-            request_id=request_id,
-            generation_config=generation_config,
-            guided_decode_config=guided_decode_config,
-        )
-        try:
-            result = future.result()
-            return result
-        except Exception as e:
-            return self._process_exception(e, request_id=request_id)
+        if use_thread_pool:
+            # assert stream is False
+            future = self.chat_in_thread(
+                messages=messages,
+                request_id=request_id,
+                generation_config=generation_config,
+                guided_decode_config=guided_decode_config,
+            )
+            try:
+                result = future.result()
+                return result
+            except Exception as e:
+                return self._process_exception(e, request_id=request_id)
+        else:
+            return self._chat_in_main_thread(
+                messages=messages,
+                request_id=request_id,
+                generation_config=generation_config,
+                guided_decode_config=guided_decode_config,
+            )
 
     def chat_stream(
         self,
