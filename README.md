@@ -9,7 +9,8 @@ I hate `result.choices[0].message.content`, I refer to the [promptic](https://gi
 # Installation
 
 ```bash
-git clone https://www.github.com/zhengyima/simple_prompt
+git clone https://github.com/liuyanyi/simple_prompt.git
+```
 
 # 使用
 
