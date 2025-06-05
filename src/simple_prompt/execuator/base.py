@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Literal, Type, TypeVar
+from concurrent.futures import Future
+from typing import Any, List, Tuple, Type, TypeVar
 
-from simple_prompt.protocol import GuidedBaseModel, message_type
+from simple_prompt.protocol import GuidedBaseModel, MetaInfo, message_type
 
 ExecutorSelf = TypeVar("ExecutorSelf", bound="ExecutorMixin")
 
@@ -40,25 +41,66 @@ class ExecutorMixin(ABC):
     @abstractmethod
     def execute(
         self,
-        base_model: Type[GuidedBaseModel] | None = None,
-        use_list: bool = False,
-        request_style: Literal["vllm", "openai"] = "openai",
-        guided_decoding_backend: str | None = None,
         request_id: str | None = None,
-    ):
+    ) -> Tuple[str, MetaInfo]:
         """调用模型
 
-        - 如果没有入参，直接返回结果
-        - 如果 base_model 有值，解析结果为给定的BaseModel类型
-        - 如果 base_model 有值且 use_list 为 True，解析结果为给定的BaseModel类型数组
-
         Args:
-            base_model (Type[GuidedBaseModel], optional): BaseModel的子类. Defaults to None.
-            use_list (bool, optional): 是否返回列表. Defaults to False.
-            request_style (Literal["vllm", "openai"], optional): 请求风格. Defaults to "openai".
-            guided_decoding_backend (str | None, optional): 引导解码后端. Defaults to None.
             request_id (str | None, optional): 请求ID(可选). Defaults to None.
 
         Returns:
-            result (Tuple[str | GuidedBaseModel | List[GuidedBaseModel], MetaInfo]): 返回结果和元信息
+            result (Tuple[str, MetaInfo]): 返回结果和元信息
         """
+
+    @abstractmethod
+    def parse(
+        self,
+        base_model: Type[GuidedBaseModel] | dict,
+        use_list: bool = False,
+        request_id: str | None = None,
+    ) -> Tuple[GuidedBaseModel | List[GuidedBaseModel] | dict | List[dict], MetaInfo]:
+        """调用模型，并解析结果为给定的BaseModel类型，返回结果和元信息
+
+        Args:
+            base_model (Type[GuidedBaseModel]): BaseModel的子类
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Tuple[GuidedBaseModel | List[GuidedBaseModel] | dict | List[dict], MetaInfo]): 解析后的结果和元信息
+        """
+
+    @abstractmethod
+    def execute_in_future(
+        self, request_id: str | None = None
+    ) -> Future[Tuple[str, MetaInfo]]:
+        """在线程池中调用模型,返回 Future 对象
+
+        Args:
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Future[Tuple[str, MetaInfo]]): Future 对象
+        """
+        ...
+
+    @abstractmethod
+    def parse_in_future(
+        self,
+        base_model: Type[GuidedBaseModel] | dict,
+        use_list: bool = False,
+        request_id: str | None = None,
+    ) -> Future[
+        Tuple[GuidedBaseModel | List[GuidedBaseModel] | dict | List[dict], MetaInfo]
+    ]:
+        """在线程池中调用模型并解析结果,返回 Future 对象
+
+        Args:
+            base_model (Type[GuidedBaseModel]): BaseModel的子类
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Future[Tuple[GuidedBaseModel | List[GuidedBaseModel] | dict | List[dict], MetaInfo]]): Future 对象
+        """
+        ...

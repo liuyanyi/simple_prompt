@@ -44,9 +44,11 @@ class BaseLLMBackend(ABC):
         self,
         name: str = None,
         concurrency: int = 20,
+        config: dict | None = None,
         hooks: List[LLMBackendHook] | None = None,
         logger=None,
     ):
+        self.config = config or {}
         self.display_name = name
         self.thread_pool = ThreadPoolExecutor(max_workers=concurrency)
         self.hooks: List[LLMBackendHook] = hooks or []

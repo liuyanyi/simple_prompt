@@ -1,6 +1,7 @@
 import re
 from functools import lru_cache
 from typing import Any, Callable, Dict, List, Literal, Tuple, Type, overload
+from concurrent.futures import Future  # Added Future
 
 from simple_prompt.backend import get_default_backend_name
 from simple_prompt.protocol import GuidedBaseModel, MetaInfo, P
@@ -116,12 +117,44 @@ class PromptDispatcher(ExecutorMixin):
 
         return self
 
-    def messages(self):
-        if not self.selected_executor:
-            raise ValueError(
-                "no executor selected, please set fallback or check the configuration"
+    def _get_configured_executor(self) -> PromptExecutor:
+        current_selected_backend = self.selected_backend
+        current_selected_executor_factory = self.selected_executor
+
+        # Runtime re-evaluation if the dispatcher's current backend is "default"
+        if current_selected_backend == "default":
+            actual_default_backend_name = get_default_backend_name()
+            if actual_default_backend_name is None:
+                raise ValueError("Default backend name could not be determined at runtime.")
+
+            matched_rule_key = self._match_rule(actual_default_backend_name)
+            if matched_rule_key is not None:
+                current_selected_backend = actual_default_backend_name
+                current_selected_executor_factory = self.rule[matched_rule_key]
+            elif self.fallback:
+                current_selected_backend = actual_default_backend_name
+                current_selected_executor_factory = self.fallback
+            else:
+                raise ValueError(
+                    f"Default backend '{actual_default_backend_name}' not found in rule and no fallback set at runtime."
+                )
+
+        if not callable(current_selected_executor_factory):
+            raise TypeError(
+                f"Selected executor factory is not callable: {current_selected_executor_factory}. Fallback or rule might be misconfigured."
             )
-        return self.selected_executor(*self.func_args, **self.func_kwagrs).messages()
+
+        executor_instance = current_selected_executor_factory(*self.func_args, **self.func_kwagrs)
+
+        if not isinstance(executor_instance, PromptExecutor):
+            raise TypeError(f"Executor factory did not return a PromptExecutor instance. Got: {type(executor_instance)}")
+
+        executor_instance.configure(backend=current_selected_backend, **self.configure_params)
+        return executor_instance
+
+    def messages(self):
+        executor = self._get_configured_executor()
+        return executor.messages()
 
     @overload
     def execute(self, request_id: str | None = None) -> Tuple[str, MetaInfo]:
@@ -176,7 +209,7 @@ class PromptDispatcher(ExecutorMixin):
             request_id (str | None, optional): 请求ID(可选). Defaults to None.
 
         Returns:
-            result (Tuple[List[GuidedBaseModel], MetaInfo]): 解析后的结果和元信息
+            result (Tuple[List[GuidedBaseModel, MetaInfo]): 解析后的结果和元信息
         """
 
     def execute(
@@ -203,30 +236,138 @@ class PromptDispatcher(ExecutorMixin):
         Returns:
             result (Tuple[str | GuidedBaseModel | List[GuidedBaseModel], MetaInfo]): 返回结果和元信息
         """
-        if self.selected_backend == "default":
-            selected_backend_name = get_default_backend_name()
-            matched_rule = self._match_rule(selected_backend_name)
-            if matched_rule is not None:
-                self.selected_backend = selected_backend_name
-                self.selected_executor = self.rule[selected_backend_name]
-            else:
-                self.selected_backend = selected_backend_name
-                self.selected_executor = self.fallback
+        executor = self._get_configured_executor()
+        return executor.execute(request_id=request_id)
 
-        if not self.selected_executor:
-            raise ValueError(
-                "no executor selected, please set fallback or check the configuration"
-            )
+    @overload
+    def parse(
+        self,
+        base_model: Type[GuidedBaseModel],
+        use_list: Literal[False] = False,
+        request_id: str | None = None,
+    ) -> Tuple[GuidedBaseModel, MetaInfo]:
+        ...
 
-        # 配置参数
-        executor = self.selected_executor(*self.func_args, **self.func_kwagrs)
-        executor.configure(backend=self.selected_backend, **self.configure_params)
+    @overload
+    def parse(
+        self,
+        base_model: dict,
+        use_list: Literal[True] = True,
+        request_id: str | None = None,
+    ) -> Tuple[List[dict], MetaInfo]:
+        ...
 
-        return executor.execute(
+    @overload
+    def parse(
+        self,
+        base_model: dict,
+        use_list: Literal[False] = False,
+        request_id: str | None = None,
+    ) -> Tuple[dict, MetaInfo]:
+        ...
+
+    @overload
+    def parse(
+        self,
+        base_model: Type[GuidedBaseModel],
+        use_list: Literal[True] = True,
+        request_id: str | None = None,
+    ) -> Tuple[List[GuidedBaseModel], MetaInfo]:
+        ...
+
+    def parse(
+        self,
+        base_model: Type[GuidedBaseModel] | dict,
+        use_list: bool = False,
+        request_id: str | None = None,
+    ):  # Return type is (GuidedBaseModel | List[GuidedBaseModel] | dict | List[dict], MetaInfo)
+        """调用模型，并解析结果为给定的BaseModel类型，返回结果和元信息
+
+        Args:
+            base_model (Type[GuidedBaseModel] | dict): BaseModel的子类或JSON schema
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result: 解析后的结果和元信息
+        """
+        executor = self._get_configured_executor()
+        return executor.parse(
             base_model=base_model,
             use_list=use_list,
-            request_style=request_style,
-            guided_decoding_backend=guided_decoding_backend,
+            request_id=request_id,
+        )
+
+    def execute_in_future(
+        self, request_id: str | None = None
+    ) -> Future[Tuple[str, MetaInfo]]:
+        """在线程池中调用模型,返回 Future 对象
+
+        Args:
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Future[Tuple[str, MetaInfo]]): Future 对象
+        """
+        executor = self._get_configured_executor()
+        return executor.execute_in_future(request_id=request_id)
+
+    @overload
+    def parse_in_future(
+        self,
+        base_model: Type[GuidedBaseModel],
+        use_list: Literal[False] = False,
+        request_id: str | None = None,
+    ) -> Future[Tuple[GuidedBaseModel, MetaInfo]]:
+        ...
+
+    @overload
+    def parse_in_future(
+        self,
+        base_model: dict,
+        use_list: Literal[True] = True,
+        request_id: str | None = None,
+    ) -> Future[Tuple[List[dict], MetaInfo]]:
+        ...
+
+    @overload
+    def parse_in_future(
+        self,
+        base_model: dict,
+        use_list: Literal[False] = False,
+        request_id: str | None = None,
+    ) -> Future[Tuple[dict, MetaInfo]]:
+        ...
+
+    @overload
+    def parse_in_future(
+        self,
+        base_model: Type[GuidedBaseModel],
+        use_list: Literal[True] = True,
+        request_id: str | None = None,
+    ) -> Future[Tuple[List[GuidedBaseModel], MetaInfo]]:
+        ...
+
+    def parse_in_future(
+        self,
+        base_model: Type[GuidedBaseModel] | dict,
+        use_list: bool = False,
+        request_id: str | None = None,
+    ):  # Return type is Future[Tuple[GuidedBaseModel | List[GuidedBaseModel] | dict | List[dict], MetaInfo]]
+        """在线程池中调用模型并解析结果,返回 Future 对象
+
+        Args:
+            base_model (Type[GuidedBaseModel] | dict): BaseModel的子类或JSON schema
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result: Future 对象，包含解析后的结果和元信息
+        """
+        executor = self._get_configured_executor()
+        return executor.parse_in_future(
+            base_model=base_model,
+            use_list=use_list,
             request_id=request_id,
         )
 

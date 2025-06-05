@@ -7,6 +7,7 @@ from simple_prompt.protocol import (
     GuidedDecodeConfig,
     MetaInfo,
     message_type,
+    output_type,
 )
 
 from .base import ExecutorMixin
@@ -137,21 +138,14 @@ class PromptExecutor(ExecutorMixin):
         else:
             return prompt_or_messages
 
-
-    def execute(self, request_id: str | None = None):
+    def execute(self, request_id: str | None = None) -> output_type[str]:
         """调用模型
 
-        - 如果没有入参，直接返回结果
-        - 如果 base_model 有值，解析结果为给定的BaseModel类型
-        - 如果 base_model 有值且 use_list 为 True，解析结果为给定的BaseModel类型数组
-
         Args:
-            base_model (Type[GuidedBaseModel], optional): BaseModel的子类. Defaults to None.
-            use_list (bool, optional): 是否返回列表. Defaults to False.
             request_id (str | None, optional): 请求ID(可选). Defaults to None.
 
         Returns:
-            result (Tuple[str | GuidedBaseModel | List[GuidedBaseModel], MetaInfo]): 返回结果和元信息
+            result (Tuple[str, MetaInfo]): 返回结果和元信息
         """
         request_id, messages, sampling_params, _ = self._prepare_input(
             request_id=request_id
@@ -267,7 +261,7 @@ class PromptExecutor(ExecutorMixin):
         )
         return result
 
-    @overload 
+    @overload
     def execute_in_future(
         self, request_id: str | None = None
     ) -> Future[Tuple[str, MetaInfo]]:
@@ -396,10 +390,10 @@ class PromptExecutor(ExecutorMixin):
         Returns:
             result (Future[Tuple[GuidedBaseModel | List[GuidedBaseModel], MetaInfo]]): Future 对象
         """
-        request_id, messages, sampling_params, guided_decode_config = self._prepare_input(
-            base_model=base_model,
-            use_list=use_list,
-            request_id=request_id
+        request_id, messages, sampling_params, guided_decode_config = (
+            self._prepare_input(
+                base_model=base_model, use_list=use_list, request_id=request_id
+            )
         )
 
         future = self.backend.chat_in_thread(
@@ -449,4 +443,3 @@ class PromptExecutor(ExecutorMixin):
             generation_config=sampling_params,
         ):
             yield response
-

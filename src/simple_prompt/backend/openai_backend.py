@@ -48,7 +48,13 @@ class OpenAILLMBackend(BaseLLMBackend):
         if name is None:
             name = self.model_name
 
-        super().__init__(name=name, concurrency=concurrency, hooks=hooks, logger=logger)
+        super().__init__(
+            name=name,
+            concurrency=concurrency,
+            config=config,
+            hooks=hooks,
+            logger=logger,
+        )
 
         # 构造openai client
         self.client = OpenAI(**config)

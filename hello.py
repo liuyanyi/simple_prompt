@@ -14,10 +14,11 @@ def translate(text: str, target_language: str = "Chinese"):
 backend = OpenAILLMBackend(
     name="vllm",
     config={
-        "model_name": "qwen",
+        "model_name": "Qwen2.5-72B-Instruct",
         "api_key": "sk-*",
-        "base_url": "http://10.142.6.40:40404/v1",
+        "base_url": "http://10.100.129.193:30003/v1",
     },
+    concurrency=5,
 )
 
 register_backend(backend=backend)

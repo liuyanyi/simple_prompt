@@ -62,6 +62,10 @@ class LLMBackendRegistry:
     def get_default_backend_name(self) -> Optional[str]:
         return self.default_backend_name
 
+    def list_backends(self) -> List[str]:
+        """List all registered backend names."""
+        return list(self.all_backends.keys())
+
     def shutdown(self):
         for backend in self.all_backends.values():
             del backend
@@ -103,3 +107,8 @@ def get_default_backend_name() -> Optional[str]:
 
 def shutdown():
     registry.shutdown()
+
+
+def list_backends() -> List[str]:
+    """List all registered backend names."""
+    return registry.list_backends()

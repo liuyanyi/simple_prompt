@@ -1,3 +1,4 @@
+import inspect
 from functools import wraps
 from typing import Any, Callable, Dict, List
 
@@ -5,6 +6,46 @@ from simple_prompt.protocol import P, R
 
 from .prompt_dispatcher import PromptDispatcher
 from .prompt_execuator import PromptExecutor
+
+
+class PromptFunction:
+    """可被IDE正确识别的Prompt函数类"""
+
+    def __init__(
+        self,
+        func: Callable[P, R],
+        backend: str,
+        sampling_params: Dict[str, Any],
+        **kwargs: Any,
+    ):
+        self.func = func
+        self.backend_name = backend
+        self.sampling_params = sampling_params
+        self.kwargs = kwargs
+        # 保留原函数的元数据
+        self.__name__ = func.__name__
+        self.__doc__ = func.__doc__
+        self.__module__ = func.__module__
+        self.__annotations__ = getattr(func, "__annotations__", {})
+        self.__signature__ = inspect.signature(func)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> PromptExecutor:
+        """调用函数并返回PromptExecutor实例"""
+
+        executor = PromptExecutor(
+            backend=self.backend_name,
+            prompt=None,
+            func=self.func,
+            func_args=args,
+            func_kwagrs=kwargs,
+            sampling_params=self.sampling_params,
+            **self.kwargs,
+        )
+        return executor
+
+    def __repr__(self) -> str:
+        """返回函数的字符串表示"""
+        return f"<PromptFunction {self.func.__name__}>"
 
 
 def prompt(
@@ -29,41 +70,31 @@ def prompt(
     **kwargs: Any,
 ):
     def decorator(func: Callable[P, R]) -> Callable[P, PromptExecutor]:
-        @wraps(func)
-        def wrapper(*nest_args: Any, **nest_kwargs: Any) -> PromptExecutor:
-            sampling_params = {
-                "temperature": temperature,
-                "top_p": top_p,
-                "top_k": top_k,
-                "presence_penalty": presence_penalty,
-                "frequency_penalty": frequency_penalty,
-                "repetition_penalty": repetition_penalty,
-                "min_p": min_p,
-                "stop": stop,
-                "stop_token_ids": stop_token_ids,
-                "bad_words": bad_words,
-                "ignore_eos": ignore_eos,
-                "max_tokens": max_tokens,
-                "min_tokens": min_tokens,
-                "logprobs": logprobs,
-                "prompt_logprobs": prompt_logprobs,
-            }
-            # 过滤掉None值
-            sampling_params = {
-                k: v for k, v in sampling_params.items() if v is not None
-            }
-            executor = PromptExecutor(
-                backend=default_backend,
-                prompt=None,
-                func=func,
-                func_args=nest_args,
-                func_kwagrs=nest_kwargs,
-                sampling_params=sampling_params,
-                **kwargs,
-            )
-            return executor
-
-        return wrapper
+        sampling_params = {
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "presence_penalty": presence_penalty,
+            "frequency_penalty": frequency_penalty,
+            "repetition_penalty": repetition_penalty,
+            "min_p": min_p,
+            "stop": stop,
+            "stop_token_ids": stop_token_ids,
+            "bad_words": bad_words,
+            "ignore_eos": ignore_eos,
+            "max_tokens": max_tokens,
+            "min_tokens": min_tokens,
+            "logprobs": logprobs,
+            "prompt_logprobs": prompt_logprobs,
+        }
+        # 过滤掉None值
+        sampling_params = {k: v for k, v in sampling_params.items() if v is not None}
+        return PromptFunction(
+            func=func,
+            backend=default_backend,
+            sampling_params=sampling_params,
+            **kwargs,
+        )
 
     if len(args) == 1 and callable(args[0]):
         # TODO This is for IDE to recognize the decorator.
@@ -76,7 +107,6 @@ def prompt(
         raise ValueError("Use keyword arguments to pass parameters to @prompt()")
 
     return decorator
-
 
 
 def prompt_dispatcher(
