@@ -88,6 +88,8 @@ class OpenAILLMBackend(BaseLLMBackend):
             else:
                 # BaseModel
                 json_schema = base_model.model_json_schema()
+                # Force additionalProperties to be False 
+                json_schema["additionalProperties"] = False
                 if guided_decode_config.use_list:
                     json_schema = {"type": "array", "items": json_schema}
                 json_schema_name = base_model.__name__.lower()

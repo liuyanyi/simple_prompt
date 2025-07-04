@@ -1,6 +1,7 @@
 from concurrent.futures import Future
 from typing import Any, Callable, Dict, List, Literal, Tuple, Type, overload
 
+from pydantic import BaseModel
 from simple_prompt.backend import get_backend
 from simple_prompt.protocol import (
     GuidedBaseModel,
@@ -24,6 +25,7 @@ class PromptExecutor(ExecutorMixin):
         func_args: Any = tuple(),
         func_kwagrs: Any = dict(),
         sampling_params: Dict = dict(),
+        default_parse_model: Type[GuidedBaseModel] | dict | None = None,
         **kwargs: Any,
     ):
         self.backend = get_backend(backend)
@@ -53,6 +55,8 @@ class PromptExecutor(ExecutorMixin):
             if key in self.sampling_params:
                 self.sampling_params.pop(key)
                 # TODO warning
+
+        self.default_parse_model = default_parse_model
 
     def configure(
         self,
@@ -162,6 +166,38 @@ class PromptExecutor(ExecutorMixin):
     @overload
     def parse(
         self,
+        use_list: Literal[False] = False,
+        request_id: str | None = None,
+    ) -> Tuple["BaseModel", MetaInfo]:
+        """调用模型，并解析结果为字符串，返回结果和元信息
+
+        Args:
+            use_list (bool, optional): 是否解析成列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Tuple[str, MetaInfo]): 解析后的结果和元信息
+        """
+
+    @overload
+    def parse(
+        self,
+        use_list: Literal[True] = True,
+        request_id: str | None = None,
+    ) -> Tuple[List[BaseModel], MetaInfo]:
+        """调用模型，并解析结果为字符串数组，返回结果和元信息
+
+        Args:
+            use_list (bool, optional): 是否返回列表. Defaults to False.
+            request_id (str | None, optional): 请求ID(可选). Defaults to None.
+
+        Returns:
+            result (Tuple[List[str], MetaInfo]): 解析后的结果和元信息
+        """
+
+    @overload
+    def parse(
+        self,
         base_model: Type[GuidedBaseModel],
         use_list: Literal[False] = False,
         request_id: str | None = None,
@@ -233,7 +269,7 @@ class PromptExecutor(ExecutorMixin):
 
     def parse(
         self,
-        base_model: Type[GuidedBaseModel] | dict,
+        base_model: Type[GuidedBaseModel] | dict | None = None,
         use_list: bool = False,
         request_id: str | None = None,
     ):
@@ -247,6 +283,19 @@ class PromptExecutor(ExecutorMixin):
         Returns:
             result (Tuple[GuidedBaseModel, MetaInfo]): 解析后的结果和元信息
         """
+        if base_model is None:
+            base_model = self.default_parse_model
+
+        # 鉴别 base_model 的类型, 必须是 Type[GuidedBaseModel] 或 dict
+        if not isinstance(base_model, (Type, dict)):
+            raise TypeError(
+                "base_model must be a Type[GuidedBaseModel] or a dict (JSON schema)"
+            )
+
+        if isinstance(base_model, type) and not issubclass(base_model, BaseModel):
+            raise TypeError("Type [GuidedBaseModel] must be a subclass of BaseModel")
+
+        # 准备输入
         request_id, messages, sampling_params, guided_decode_config = (
             self._prepare_input(
                 base_model=base_model, use_list=use_list, request_id=request_id
@@ -376,7 +425,7 @@ class PromptExecutor(ExecutorMixin):
 
     def parse_in_future(
         self,
-        base_model: Type[GuidedBaseModel] | dict,
+        base_model: Type[GuidedBaseModel] | dict | None = None,
         use_list: bool = False,
         request_id: str | None = None,
     ):
@@ -390,6 +439,9 @@ class PromptExecutor(ExecutorMixin):
         Returns:
             result (Future[Tuple[GuidedBaseModel | List[GuidedBaseModel], MetaInfo]]): Future 对象
         """
+        if base_model is None:
+            base_model = self.default_parse_model
+
         request_id, messages, sampling_params, guided_decode_config = (
             self._prepare_input(
                 base_model=base_model, use_list=use_list, request_id=request_id

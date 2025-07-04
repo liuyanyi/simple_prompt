@@ -1,9 +1,8 @@
 import inspect
 from functools import wraps
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Type
 
-from simple_prompt.protocol import P, R
-
+from ..protocol import GuidedBaseModel, P, R
 from .prompt_dispatcher import PromptDispatcher
 from .prompt_execuator import PromptExecutor
 
@@ -16,11 +15,13 @@ class PromptFunction:
         func: Callable[P, R],
         backend: str,
         sampling_params: Dict[str, Any],
+        default_parse_model: Type[GuidedBaseModel] | dict | None = None,
         **kwargs: Any,
     ):
         self.func = func
         self.backend_name = backend
         self.sampling_params = sampling_params
+        self.default_parse_model = default_parse_model
         self.kwargs = kwargs
         # 保留原函数的元数据
         self.__name__ = func.__name__
@@ -39,6 +40,7 @@ class PromptFunction:
             func_args=args,
             func_kwagrs=kwargs,
             sampling_params=self.sampling_params,
+            default_parse_model=self.default_parse_model,
             **self.kwargs,
         )
         return executor
@@ -67,6 +69,8 @@ def prompt(
     min_tokens: int | None = None,
     logprobs: int | None = None,
     prompt_logprobs: int | None = None,
+    # structured output parameters
+    default_parse_model: Type[GuidedBaseModel] | dict | None = None,
     **kwargs: Any,
 ):
     def decorator(func: Callable[P, R]) -> Callable[P, PromptExecutor]:
@@ -93,6 +97,7 @@ def prompt(
             func=func,
             backend=default_backend,
             sampling_params=sampling_params,
+            default_parse_model=default_parse_model,
             **kwargs,
         )
 

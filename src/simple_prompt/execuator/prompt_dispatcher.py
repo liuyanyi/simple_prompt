@@ -125,7 +125,9 @@ class PromptDispatcher(ExecutorMixin):
         if current_selected_backend == "default":
             actual_default_backend_name = get_default_backend_name()
             if actual_default_backend_name is None:
-                raise ValueError("Default backend name could not be determined at runtime.")
+                raise ValueError(
+                    "Default backend name could not be determined at runtime."
+                )
 
             matched_rule_key = self._match_rule(actual_default_backend_name)
             if matched_rule_key is not None:
@@ -144,12 +146,18 @@ class PromptDispatcher(ExecutorMixin):
                 f"Selected executor factory is not callable: {current_selected_executor_factory}. Fallback or rule might be misconfigured."
             )
 
-        executor_instance = current_selected_executor_factory(*self.func_args, **self.func_kwagrs)
+        executor_instance = current_selected_executor_factory(
+            *self.func_args, **self.func_kwagrs
+        )
 
         if not isinstance(executor_instance, PromptExecutor):
-            raise TypeError(f"Executor factory did not return a PromptExecutor instance. Got: {type(executor_instance)}")
+            raise TypeError(
+                f"Executor factory did not return a PromptExecutor instance. Got: {type(executor_instance)}"
+            )
 
-        executor_instance.configure(backend=current_selected_backend, **self.configure_params)
+        executor_instance.configure(
+            backend=current_selected_backend, **self.configure_params
+        )
         return executor_instance
 
     def messages(self):
@@ -245,8 +253,7 @@ class PromptDispatcher(ExecutorMixin):
         base_model: Type[GuidedBaseModel],
         use_list: Literal[False] = False,
         request_id: str | None = None,
-    ) -> Tuple[GuidedBaseModel, MetaInfo]:
-        ...
+    ) -> Tuple[GuidedBaseModel, MetaInfo]: ...
 
     @overload
     def parse(
@@ -254,8 +261,7 @@ class PromptDispatcher(ExecutorMixin):
         base_model: dict,
         use_list: Literal[True] = True,
         request_id: str | None = None,
-    ) -> Tuple[List[dict], MetaInfo]:
-        ...
+    ) -> Tuple[List[dict], MetaInfo]: ...
 
     @overload
     def parse(
@@ -263,8 +269,7 @@ class PromptDispatcher(ExecutorMixin):
         base_model: dict,
         use_list: Literal[False] = False,
         request_id: str | None = None,
-    ) -> Tuple[dict, MetaInfo]:
-        ...
+    ) -> Tuple[dict, MetaInfo]: ...
 
     @overload
     def parse(
@@ -272,8 +277,7 @@ class PromptDispatcher(ExecutorMixin):
         base_model: Type[GuidedBaseModel],
         use_list: Literal[True] = True,
         request_id: str | None = None,
-    ) -> Tuple[List[GuidedBaseModel], MetaInfo]:
-        ...
+    ) -> Tuple[List[GuidedBaseModel], MetaInfo]: ...
 
     def parse(
         self,
@@ -318,8 +322,7 @@ class PromptDispatcher(ExecutorMixin):
         base_model: Type[GuidedBaseModel],
         use_list: Literal[False] = False,
         request_id: str | None = None,
-    ) -> Future[Tuple[GuidedBaseModel, MetaInfo]]:
-        ...
+    ) -> Future[Tuple[GuidedBaseModel, MetaInfo]]: ...
 
     @overload
     def parse_in_future(
@@ -327,8 +330,7 @@ class PromptDispatcher(ExecutorMixin):
         base_model: dict,
         use_list: Literal[True] = True,
         request_id: str | None = None,
-    ) -> Future[Tuple[List[dict], MetaInfo]]:
-        ...
+    ) -> Future[Tuple[List[dict], MetaInfo]]: ...
 
     @overload
     def parse_in_future(
@@ -336,8 +338,7 @@ class PromptDispatcher(ExecutorMixin):
         base_model: dict,
         use_list: Literal[False] = False,
         request_id: str | None = None,
-    ) -> Future[Tuple[dict, MetaInfo]]:
-        ...
+    ) -> Future[Tuple[dict, MetaInfo]]: ...
 
     @overload
     def parse_in_future(
@@ -345,8 +346,7 @@ class PromptDispatcher(ExecutorMixin):
         base_model: Type[GuidedBaseModel],
         use_list: Literal[True] = True,
         request_id: str | None = None,
-    ) -> Future[Tuple[List[GuidedBaseModel], MetaInfo]]:
-        ...
+    ) -> Future[Tuple[List[GuidedBaseModel], MetaInfo]]: ...
 
     def parse_in_future(
         self,
@@ -370,4 +370,3 @@ class PromptDispatcher(ExecutorMixin):
             use_list=use_list,
             request_id=request_id,
         )
-
