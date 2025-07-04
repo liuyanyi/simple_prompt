@@ -104,7 +104,7 @@ class BaseLLMBackend(ABC):
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> "output_type":
         raise NotImplementedError
-    
+
     @abstractmethod
     async def async_chat(
         self,
@@ -114,7 +114,7 @@ class BaseLLMBackend(ABC):
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> "Future[output_type|exception_output_type]":
         raise NotImplementedError
-    
+
     @abstractmethod
     async def async_chat_stream(
         self,
