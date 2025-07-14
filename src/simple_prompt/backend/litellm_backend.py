@@ -73,13 +73,15 @@ class LiteLLMBackend(BaseLLMBackend):
         self.litellm_config = config
         self.default_body = config.get("default_body", {})
 
-        # Set up LiteLLM configuration
+        # Store configuration for per-request use instead of setting globals
+        # This allows multiple LiteLLM backends with different configurations
+        self.api_config = {}
         if config.get("api_key"):
-            litellm.api_key = config["api_key"]
+            self.api_config["api_key"] = config["api_key"]
         if config.get("api_base"):
-            litellm.api_base = config["api_base"]
+            self.api_config["base_url"] = config["api_base"]  # litellm uses 'base_url'
         if config.get("api_version"):
-            litellm.api_version = config["api_version"]
+            self.api_config["api_version"] = config["api_version"]
 
     def _process_input_data(
         self,
@@ -170,9 +172,11 @@ class LiteLLMBackend(BaseLLMBackend):
             if key in self.litellm_config and self.litellm_config[key]:
                 filtered_params[key] = self.litellm_config[key]
 
+        # Merge API configuration (api_key, base_url, api_version) with other params
         return {
             "messages": messages,
             "model": self.model_name,
+            **self.api_config,
             **filtered_params,
         }
 
