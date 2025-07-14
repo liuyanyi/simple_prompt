@@ -156,3 +156,43 @@ class BaseLLMBackend(ABC):
                 )
             except Exception as e:
                 self.logger.error(f"Error in hook {hook.HOOK_NAME} on_request_end: {e}")
+
+    # Default implementations that can be used by subclasses
+    def _default_chat_implementation(
+        self,
+        messages: message_type,
+        request_id: str = None,
+        generation_config: dict | None = None,
+        guided_decode_config: GuidedDecodeConfig | None = None,
+        use_thread_pool: bool = True,
+    ):
+        """Default chat implementation that can be used by subclasses."""
+        if use_thread_pool:
+            future = self.chat_in_thread(
+                messages=messages,
+                request_id=request_id,
+                generation_config=generation_config,
+                guided_decode_config=guided_decode_config,
+            )
+            try:
+                result = future.result()
+                return result
+            except Exception as e:
+                return self._process_exception(e, request_id=request_id)
+        else:
+            return self._chat_in_main_thread(
+                messages=messages,
+                request_id=request_id,
+                generation_config=generation_config,
+                guided_decode_config=guided_decode_config,
+            )
+
+    @abstractmethod
+    def _process_exception(
+        self,
+        e: Exception,
+        request_id: str | None = None,
+        start_time: float | None = None,
+    ) -> "exception_output_type":
+        """Process an exception and return standardized error output."""
+        raise NotImplementedError

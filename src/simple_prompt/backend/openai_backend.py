@@ -274,26 +274,14 @@ class OpenAILLMBackend(BaseLLMBackend):
         guided_decode_config: GuidedDecodeConfig | None = None,
         use_thread_pool: bool = True,
     ):
-        if use_thread_pool:
-            # assert stream is False
-            future = self.chat_in_thread(
-                messages=messages,
-                request_id=request_id,
-                generation_config=generation_config,
-                guided_decode_config=guided_decode_config,
-            )
-            try:
-                result = future.result()
-                return result
-            except Exception as e:
-                return self._process_exception(e, request_id=request_id)
-        else:
-            return self._chat_in_main_thread(
-                messages=messages,
-                request_id=request_id,
-                generation_config=generation_config,
-                guided_decode_config=guided_decode_config,
-            )
+        """Use the default chat implementation from base class."""
+        return self._default_chat_implementation(
+            messages=messages,
+            request_id=request_id,
+            generation_config=generation_config,
+            guided_decode_config=guided_decode_config,
+            use_thread_pool=use_thread_pool,
+        )
 
     def chat_stream(
         self,
