@@ -1,15 +1,13 @@
 import asyncio
 import copy
-import inspect
 import json
 import time
 from concurrent.futures import Future
 from functools import partial
 from typing import Callable, Generator, List
 
-import openai
-from openai import OpenAI
-from openai.types.chat import ChatCompletion, ChatCompletionChunk
+import litellm
+from litellm import ModelResponse, get_supported_openai_params
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
@@ -24,21 +22,36 @@ from simple_prompt.protocol import (
 from .base import BaseLLMBackend, LLMBackendHook
 
 
-class OpenAIConfig(TypedDict):
+class LiteLLMConfig(TypedDict):
     model_name: str
     api_key: str | None
-    base_url: str | None
+    api_base: str | None
+    api_version: str | None
     timeout: float | None
+    temperature: float | None
+    max_tokens: int | None
+    top_p: float | None
+    frequency_penalty: float | None
+    presence_penalty: float | None
+    stop: str | List[str] | None
+
+    # LiteLLM specific config
+    custom_llm_provider: str | None
+    vertex_project: str | None
+    vertex_location: str | None
+    aws_access_key_id: str | None
+    aws_secret_access_key: str | None
+    aws_region_name: str | None
 
     default_body: dict | None
 
 
-class OpenAILLMBackend(BaseLLMBackend):
+class LiteLLMBackend(BaseLLMBackend):
     def __init__(
         self,
         name: str | None = None,
         concurrency: int = 20,
-        config: OpenAIConfig | None = None,
+        config: LiteLLMConfig | None = None,
         hooks: List[LLMBackendHook] | None = None,
         logger=None,
     ):
@@ -56,9 +69,17 @@ class OpenAILLMBackend(BaseLLMBackend):
             logger=logger,
         )
 
-        # 构造openai client
-        self.client = OpenAI(**config)
+        # Configure LiteLLM with environment variables or config
+        self.litellm_config = config
         self.default_body = config.get("default_body", {})
+
+        # Set up LiteLLM configuration
+        if config.get("api_key"):
+            litellm.api_key = config["api_key"]
+        if config.get("api_base"):
+            litellm.api_base = config["api_base"]
+        if config.get("api_version"):
+            litellm.api_version = config["api_version"]
 
     def _process_input_data(
         self,
@@ -66,20 +87,31 @@ class OpenAILLMBackend(BaseLLMBackend):
         generation_config: dict | None = None,
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> dict:
-        """Process input data for the LLM backend."""
+        """Process input data for the LiteLLM backend."""
 
-        # 检查sampling_params中，参数是否都在openai.ChatCompletion.create()中
-        all_create_params = list(
-            inspect.signature(openai.resources.chat.Completions.create).parameters
+        # Get supported parameters for this model
+        try:
+            supported_params = get_supported_openai_params(model=self.model_name)
+        except Exception:
+            # Fallback to common OpenAI parameters if we can't get model-specific ones
+            supported_params = [
+                "temperature",
+                "max_tokens",
+                "top_p",
+                "frequency_penalty",
+                "presence_penalty",
+                "stop",
+                "stream",
+                "n",
+                "response_format",
+            ]
+
+        _generation_config = (
+            copy.deepcopy(generation_config) if generation_config else {}
         )
-        not_allowed_params = ["messages", "model"]
-        _generation_config = copy.deepcopy(generation_config)
-        for k, v in _generation_config.items():
-            if k in not_allowed_params:
-                raise ValueError(f"Parameter {k} is not allowed in sampling params")
 
+        # Handle guided decode configuration
         if guided_decode_config:
-            # 如果有guided_decode_config，需要额外处理
             base_model = guided_decode_config.base_model
             if isinstance(base_model, dict):
                 # json schema
@@ -93,10 +125,11 @@ class OpenAILLMBackend(BaseLLMBackend):
                 if guided_decode_config.use_list:
                     json_schema = {"type": "array", "items": json_schema}
                 json_schema_name = base_model.__name__.lower()
-            # OPENAI FORMAT JSON SCHEMA
+
+            # LiteLLM supports response_format for compatible models
             if "response_format" in _generation_config:
                 raise ValueError(
-                    "response_format is already provided in sampling params"
+                    "response_format is already provided in generation config"
                 )
 
             _generation_config["response_format"] = {
@@ -108,59 +141,87 @@ class OpenAILLMBackend(BaseLLMBackend):
                 },
             }
 
-            # 其他可能需要的参数
-
-        # 将不在openai.ChatCompletion.create()中的参数过滤到extra_body中
-        extra_body = {}
-        filtered_sampling_params = {}
+        # Filter parameters based on what's supported
+        filtered_params = {}
         for k, v in _generation_config.items():
-            if k in all_create_params:
-                filtered_sampling_params[k] = v
-            elif k not in not_allowed_params:
-                extra_body[k] = v
+            if (
+                k in supported_params or k == "response_format"
+            ):  # Always allow response_format for guided decode
+                filtered_params[k] = v
             else:
-                raise ValueError(f"Parameter {k} is not allowed in sampling params")
+                self.logger.warning(
+                    f"Parameter {k} not supported for model {self.model_name}, skipping"
+                )
 
-        # 合并默认body
+        # Merge with default body
         for k, v in self.default_body.items():
-            if k not in filtered_sampling_params:
-                filtered_sampling_params[k] = v
+            if k not in filtered_params:
+                filtered_params[k] = v
+
+        # Add LiteLLM specific config
+        for key in [
+            "custom_llm_provider",
+            "vertex_project",
+            "vertex_location",
+            "aws_access_key_id",
+            "aws_secret_access_key",
+            "aws_region_name",
+        ]:
+            if key in self.litellm_config and self.litellm_config[key]:
+                filtered_params[key] = self.litellm_config[key]
 
         return {
             "messages": messages,
-            "extra_body": extra_body,
-            **filtered_sampling_params,
+            "model": self.model_name,
+            **filtered_params,
         }
 
     def _process_result(
         self,
-        result: ChatCompletion | ChatCompletionChunk,
+        result: ModelResponse,
         request_id: str | None = None,
         start_time: float | None = None,
     ) -> "raw_output_type":
         finish_time = time.time()
-        if isinstance(result, ChatCompletionChunk):
-            result_texts = [choice.delta.content for choice in result.choices]
+
+        # Extract content from LiteLLM response
+        if hasattr(result, "choices") and result.choices:
+            if hasattr(result.choices[0], "delta") and result.choices[0].delta:
+                # Streaming response
+                result_texts = [choice.delta.content for choice in result.choices]
+            elif hasattr(result.choices[0], "message") and result.choices[0].message:
+                # Regular response
+                result_texts = [choice.message.content for choice in result.choices]
+            else:
+                result_texts = [""]
         else:
-            result_texts = [choice.message.content for choice in result.choices]
+            result_texts = [""]
+
+        # Handle None values
         for i in range(len(result_texts)):
             if result_texts[i] is None:
                 result_texts[i] = ""
-        result_texts: List[str]
+
+        # If single result, unwrap from list
         if len(result_texts) == 1:
             result_texts = result_texts[0]
-            result_texts: str
+
         if request_id is None:
-            request_id = result.id
+            request_id = getattr(result, "id", f"litellm-{time.time()}")
+
+        # Extract finish reasons
+        finish_reasons = []
+        if hasattr(result, "choices") and result.choices:
+            finish_reasons = [choice.finish_reason for choice in result.choices]
 
         meta_data = MetaInfo(
             request_id=request_id,
             success=True,
-            model=result.model,
+            model=getattr(result, "model", self.model_name),
             start_time=start_time,
             end_time=finish_time,
-            finish_reason=[choice.finish_reason for choice in result.choices],
-            usage=result.usage,
+            finish_reason=finish_reasons,
+            usage=getattr(result, "usage", None),
             original_result=result,
         )
         return result_texts, meta_data
@@ -171,9 +232,8 @@ class OpenAILLMBackend(BaseLLMBackend):
         request_id: str | None = None,
         start_time: float | None = None,
     ) -> "exception_output_type":
-        # logger.error(f"Error processing request {request_id}: {e}")
         if request_id is None:
-            request_id = f"unknown-{time.time()}"
+            request_id = f"litellm-error-{time.time()}"
         self.logger.warning(
             f"Request {request_id} with {self.display_name} failed with error: {e}"
         )
@@ -194,7 +254,6 @@ class OpenAILLMBackend(BaseLLMBackend):
 
         if isinstance(base_model, dict):
             # json schema
-            # 仅返回dict
             def _json_schema_postprocess(
                 result: str | None,
                 meta: MetaInfo,
@@ -212,7 +271,6 @@ class OpenAILLMBackend(BaseLLMBackend):
             return _json_schema_postprocess
         else:
             # BaseModel
-            # 返回BaseModel或者BaseModel的list
             def _basemodel_postprocess(
                 result: str | None,
                 meta: MetaInfo,
@@ -244,7 +302,7 @@ class OpenAILLMBackend(BaseLLMBackend):
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> "output_type":
         try:
-            openai_client_input = self._process_input_data(
+            litellm_input = self._process_input_data(
                 messages, generation_config, guided_decode_config
             )
             post_processor = None
@@ -253,9 +311,7 @@ class OpenAILLMBackend(BaseLLMBackend):
                     guided_decode_config
                 )
             start = time.time()
-            result = self.client.chat.completions.create(
-                model=self.model_name, **openai_client_input
-            )
+            result = litellm.completion(**litellm_input)
             res, meta = self._process_result(
                 result, request_id=request_id, start_time=start
             )
@@ -275,7 +331,6 @@ class OpenAILLMBackend(BaseLLMBackend):
         use_thread_pool: bool = True,
     ):
         if use_thread_pool:
-            # assert stream is False
             future = self.chat_in_thread(
                 messages=messages,
                 request_id=request_id,
@@ -302,31 +357,32 @@ class OpenAILLMBackend(BaseLLMBackend):
         generation_config: dict | None = None,
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> "Generator[raw_output_type|exception_output_type]":
-        generation_config["n"] = 1
+        generation_config = generation_config or {}
         generation_config["stream"] = True
 
         if guided_decode_config:
             raise ValueError("Guided decode is not supported in stream mode")
 
         def generator():
-            openai_client_input = self._process_input_data(
+            litellm_input = self._process_input_data(
                 messages, generation_config, guided_decode_config
             )
             start = time.time()
-            # TODO hook for pre processing
-            for response in self.client.chat.completions.create(
-                model=self.model_name, **openai_client_input
-            ):
-                response: "ChatCompletionChunk"
-                res, meta = self._process_result(
-                    response, request_id=request_id, start_time=start
+            try:
+                for response in litellm.completion(**litellm_input):
+                    res, meta = self._process_result(
+                        response, request_id=request_id, start_time=start
+                    )
+                    yield res, meta
+            except Exception as e:
+                yield self._process_exception(
+                    e, request_id=request_id, start_time=start
                 )
-                yield res, meta
-            # TODO hook for post processing
 
         future = self.thread_pool.submit(generator)
         try:
-            for response in future.result():
+            gen = future.result()
+            for response in gen:
                 yield response
         except Exception as e:
             yield self._process_exception(e, request_id=request_id)
@@ -344,7 +400,7 @@ class OpenAILLMBackend(BaseLLMBackend):
         def chat_wrapper() -> "raw_output_type | output_type | exception_output_type":
             try:
                 start = time.time()
-                openai_client_input = self._process_input_data(
+                litellm_input = self._process_input_data(
                     messages, generation_config, guided_decode_config
                 )
                 post_processor = None
@@ -353,19 +409,16 @@ class OpenAILLMBackend(BaseLLMBackend):
                         guided_decode_config
                     )
 
-                self._hooks_on_request_start(start, openai_client_input, request_id)
-                result = self.client.chat.completions.create(
-                    model=self.model_name, **openai_client_input
-                )
+                self._hooks_on_request_start(start, litellm_input, request_id)
+                result = litellm.completion(**litellm_input)
                 result, meta = self._process_result(
                     result, request_id=request_id, start_time=start
                 )
-                self._hooks_on_request_end(result, meta, openai_client_input)
+                self._hooks_on_request_end(result, meta, litellm_input)
                 if post_processor:
                     return post_processor(result, meta)
                 else:
                     return result, meta
-                # return self._process_result(result)
             except Exception as e:
                 return self._process_exception(
                     e, request_id=request_id, start_time=start
@@ -382,15 +435,11 @@ class OpenAILLMBackend(BaseLLMBackend):
     ) -> "output_type|exception_output_type":
         generation_config = generation_config or {}
         generation_config["stream"] = False
-        openai_client_input = self._process_input_data(
+        litellm_input = self._process_input_data(
             messages, generation_config, guided_decode_config
         )
         loop = asyncio.get_running_loop()
-        func = partial(
-            self.client.chat.completions.create,
-            model=self.model_name,
-            **openai_client_input,
-        )
+        func = partial(litellm.completion, **litellm_input)
         post_processor = None
         if guided_decode_config:
             post_processor = self._build_guided_decode_post_processor(
@@ -398,13 +447,11 @@ class OpenAILLMBackend(BaseLLMBackend):
             )
 
         try:
-            # TODO hook for pre processing
             start = time.time()
             result = await loop.run_in_executor(self.thread_pool, func)
             res, meta = self._process_result(
                 result, request_id=request_id, start_time=start
             )
-            # TODO hook for post processing
             if post_processor:
                 return post_processor(res, meta)
             else:
@@ -429,20 +476,23 @@ class OpenAILLMBackend(BaseLLMBackend):
         loop = asyncio.get_running_loop()
 
         def generator():
-            openai_client_input = self._process_input_data(
+            litellm_input = self._process_input_data(
                 messages, generation_config, guided_decode_config
             )
             start = time.time()
-            for response in self.client.chat.completions.create(
-                model=self.model_name, **openai_client_input
-            ):
-                response: "ChatCompletionChunk"
-                yield self._process_result(
-                    response, request_id=request_id, start_time=start
+            try:
+                for response in litellm.completion(**litellm_input):
+                    yield self._process_result(
+                        response, request_id=request_id, start_time=start
+                    )
+            except Exception as e:
+                yield self._process_exception(
+                    e, request_id=request_id, start_time=start
                 )
 
         try:
-            for response in await loop.run_in_executor(self.thread_pool, generator):
+            gen = await loop.run_in_executor(self.thread_pool, generator)
+            for response in gen:
                 yield response
         except Exception as e:
             yield self._process_exception(e, request_id=request_id)

@@ -1,5 +1,3 @@
-import logging
-
 from simple_prompt.protocol import MetaInfo
 from simple_prompt.utils import beautify_time
 

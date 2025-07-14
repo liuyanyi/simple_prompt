@@ -1,6 +1,7 @@
 from .base import BaseLLMBackend, LLMBackendHook
 from .hook import LoggingHook
 from .openai_backend import OpenAILLMBackend
+from .litellm_backend import LiteLLMBackend
 from .registry import (
     get_backend,
     get_default_backend_name,
@@ -15,6 +16,7 @@ __all__ = [
     "BaseLLMBackend",
     "LLMBackendHook",
     "OpenAILLMBackend",
+    "LiteLLMBackend",
     "vLLMBackend",
     "register_backend",
     "get_backend",

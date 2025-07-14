@@ -19,6 +19,7 @@ from simple_prompt.backend import (
     register_backend,
     set_default_backend,
     OpenAILLMBackend,
+    LiteLLMBackend,  # New LiteLLM backend
 )
 from simple_prompt.execuator import prompt
 
@@ -28,6 +29,7 @@ def translate(text: str, target_language: str = "Chinese"):
     return f"Please translate the following text into {target_language}: \n{text}"
 
 
+# Example using OpenAI backend
 backend = OpenAILLMBackend(
     name="vllm",
     config={
@@ -37,7 +39,20 @@ backend = OpenAILLMBackend(
     },
 )
 
+# Example using LiteLLM backend (supports 100+ providers)
+litellm_backend = LiteLLMBackend(
+    name="claude",
+    config={
+        "model_name": "claude-3-sonnet-20240229",
+        "api_key": "your-anthropic-api-key",
+        "custom_llm_provider": "anthropic",
+        "temperature": 0.7,
+        "max_tokens": 150,
+    },
+)
+
 register_backend(backend=backend)
+# register_backend(backend=litellm_backend)  # Uncomment to use LiteLLM
 set_default_backend("vllm")
 
 # Simplely call the function, then execute the function
@@ -48,7 +63,7 @@ print(result)
 
 ## Future Work
 
-- [ ] LiteLLM Backend for all kinds of LLM models
+- [x] LiteLLM Backend for all kinds of LLM models (supports 100+ providers including OpenAI, Anthropic, Azure, Google, Cohere, Hugging Face, and more)
 - [ ] Function call with `prompt` decorator
 - [ ] Retry
 - [ ] Cache
