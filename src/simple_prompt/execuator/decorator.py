@@ -43,6 +43,13 @@ class PromptFunction:
             default_parse_model=self.default_parse_model,
             **self.kwargs,
         )
+        # Pre check
+        try:
+            _ = executor.messages()
+        except Exception as e:
+            raise ValueError(
+                f"PromptFunction {self.func.__name__} initialization failed: {e}"
+            ) from e
         return executor
 
     def __repr__(self) -> str:
