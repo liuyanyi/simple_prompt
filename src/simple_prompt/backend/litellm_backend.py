@@ -277,6 +277,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         guided_decode_config: GuidedDecodeConfig | None = None,
         use_thread_pool: bool = True,
     ):
+        start = time.time()
         if use_thread_pool:
             future = self.chat_in_thread(
                 messages=messages,
@@ -288,7 +289,6 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                 result = future.result()
                 return result
             except Exception as e:
-                start = time.time()
                 return self._process_exception(
                     e, request_id=request_id, start_time=start
                 )
@@ -316,11 +316,12 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         if guided_decode_config:
             raise ValueError("Guided decode is not supported in stream mode")
 
+        start = time.time()
+
         def generator():
             litellm_input = self._process_input_data(
                 messages, generation_config, guided_decode_config
             )
-            start = time.time()
 
             kwargs = {
                 "model": self.model_name,
@@ -344,7 +345,6 @@ class LiteLLMLLMBackend(BaseLLMBackend):
             for response in future.result():
                 yield response
         except Exception as e:
-            start = time.time()
             yield self._process_exception(e, request_id=request_id, start_time=start)
 
     def chat_in_thread(
@@ -361,8 +361,8 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         generation_config["stream"] = False
 
         def chat_wrapper() -> "raw_output_type | output_type | exception_output_type":
+            start = time.time()
             try:
-                start = time.time()
                 litellm_input = self._process_input_data(
                     messages, generation_config, guided_decode_config
                 )
