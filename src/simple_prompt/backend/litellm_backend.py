@@ -1,13 +1,9 @@
-import asyncio
 import copy
-import inspect
 import json
 import time
 from concurrent.futures import Future
-from functools import partial
 from typing import Callable, Generator, List
 
-import litellm
 from litellm import completion, acompletion
 from pydantic import BaseModel
 from typing_extensions import TypedDict
@@ -69,9 +65,11 @@ class LiteLLMLLMBackend(BaseLLMBackend):
     ) -> dict:
         """Process input data for the LLM backend."""
 
-        _generation_config = copy.deepcopy(generation_config) if generation_config else {}
+        _generation_config = (
+            copy.deepcopy(generation_config) if generation_config else {}
+        )
         not_allowed_params = ["messages", "model"]
-        
+
         for k in _generation_config:
             if k in not_allowed_params:
                 raise ValueError(f"Parameter {k} is not allowed in generation config")
@@ -123,10 +121,10 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         start_time: float | None = None,
     ) -> "raw_output_type":
         finish_time = time.time()
-        
+
         # Extract content from LiteLLM response
-        if hasattr(result, 'choices') and len(result.choices) > 0:
-            if hasattr(result.choices[0], 'delta'):
+        if hasattr(result, "choices") and len(result.choices) > 0:
+            if hasattr(result.choices[0], "delta"):
                 # Streaming response
                 result_texts = [choice.delta.content for choice in result.choices]
             else:
@@ -134,27 +132,29 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                 result_texts = [choice.message.content for choice in result.choices]
         else:
             result_texts = [""]
-        
+
         for i in range(len(result_texts)):
             if result_texts[i] is None:
                 result_texts[i] = ""
-        
+
         result_texts: List[str]
         if len(result_texts) == 1:
             result_texts = result_texts[0]
             result_texts: str
-        
-        if request_id is None and hasattr(result, 'id'):
+
+        if request_id is None and hasattr(result, "id"):
             request_id = result.id
 
         meta_data = MetaInfo(
             request_id=request_id,
             success=True,
-            model=result.model if hasattr(result, 'model') else self.model_name,
+            model=result.model if hasattr(result, "model") else self.model_name,
             start_time=start_time,
             end_time=finish_time,
-            finish_reason=[choice.finish_reason for choice in result.choices] if hasattr(result, 'choices') else [],
-            usage=result.usage if hasattr(result, 'usage') else None,
+            finish_reason=[choice.finish_reason for choice in result.choices]
+            if hasattr(result, "choices")
+            else [],
+            usage=result.usage if hasattr(result, "usage") else None,
             original_result=result,
         )
         return result_texts, meta_data
@@ -244,7 +244,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                     guided_decode_config
                 )
             start = time.time()
-            
+
             # Prepare kwargs for LiteLLM
             kwargs = {
                 "model": self.model_name,
@@ -256,7 +256,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                 kwargs["api_base"] = self.base_url
             if self.timeout:
                 kwargs["timeout"] = self.timeout
-            
+
             result = completion(**kwargs)
             res, meta = self._process_result(
                 result, request_id=request_id, start_time=start
@@ -314,7 +314,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                 messages, generation_config, guided_decode_config
             )
             start = time.time()
-            
+
             kwargs = {
                 "model": self.model_name,
                 **litellm_input,
@@ -325,7 +325,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                 kwargs["api_base"] = self.base_url
             if self.timeout:
                 kwargs["timeout"] = self.timeout
-            
+
             for response in completion(**kwargs):
                 res, meta = self._process_result(
                     response, request_id=request_id, start_time=start
@@ -362,7 +362,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                     )
 
                 self._hooks_on_request_start(start, litellm_input, request_id)
-                
+
                 kwargs = {
                     "model": self.model_name,
                     **litellm_input,
@@ -373,7 +373,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                     kwargs["api_base"] = self.base_url
                 if self.timeout:
                     kwargs["timeout"] = self.timeout
-                
+
                 result = completion(**kwargs)
                 result, meta = self._process_result(
                     result, request_id=request_id, start_time=start
@@ -410,7 +410,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
 
         try:
             start = time.time()
-            
+
             kwargs = {
                 "model": self.model_name,
                 **litellm_input,
@@ -421,7 +421,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                 kwargs["api_base"] = self.base_url
             if self.timeout:
                 kwargs["timeout"] = self.timeout
-            
+
             result = await acompletion(**kwargs)
             res, meta = self._process_result(
                 result, request_id=request_id, start_time=start
@@ -451,7 +451,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
             messages, generation_config, guided_decode_config
         )
         start = time.time()
-        
+
         kwargs = {
             "model": self.model_name,
             **litellm_input,
