@@ -2,6 +2,7 @@ from typing import List, TypedDict
 
 from openai import AzureOpenAI
 
+from simple_prompt.protocol import ReasoningParser
 from .base import LLMBackendHook
 from .openai_backend import OpenAILLMBackend
 
@@ -26,6 +27,7 @@ class AzureOpenAILLMBackend(OpenAILLMBackend):
         config: AzureOpenAIConfig | None = None,
         hooks: List[LLMBackendHook] | None = None,
         logger=None,
+        reasoning_parser: ReasoningParser | None = None,
     ):
         assert config is not None, "config must be provided"
         self.model_name = config.pop("model_name", None)
@@ -44,3 +46,4 @@ class AzureOpenAILLMBackend(OpenAILLMBackend):
         # 构造openai client
         self.client = AzureOpenAI(**config)
         self.default_body = config.get("default_body", {})
+        self.reasoning_parser = reasoning_parser or self._default_reasoning_parser

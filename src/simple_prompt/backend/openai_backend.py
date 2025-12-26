@@ -20,6 +20,7 @@ from simple_prompt.protocol import (
     message_type,
     output_type,
     raw_output_type,
+    ReasoningParser,
 )
 from .base import BaseLLMBackend, LLMBackendHook
 
@@ -41,6 +42,7 @@ class OpenAILLMBackend(BaseLLMBackend):
         config: OpenAIConfig | None = None,
         hooks: List[LLMBackendHook] | None = None,
         logger=None,
+        reasoning_parser: ReasoningParser | None = None,
     ):
         assert config is not None, "config must be provided"
         self.model_name = config.pop("model_name", None)
@@ -59,6 +61,21 @@ class OpenAILLMBackend(BaseLLMBackend):
         # 构造openai client
         self.client = OpenAI(**config)
         self.default_body = config.get("default_body", {})
+        self.reasoning_parser = reasoning_parser or self._default_reasoning_parser
+
+    def _default_reasoning_parser(
+        self, result: ChatCompletion | ChatCompletionChunk
+    ) -> str | List[str] | None:
+        """
+        Default reasoning parser that extracts reasoning from the response.
+        For models that don't separate reasoning and completion, this returns None.
+        For models like o1 that may have reasoning tokens in usage, this could be extended
+        to extract reasoning content if available in the response.
+        """
+        # Currently OpenAI API doesn't provide separate reasoning content in the response
+        # This is a placeholder for future enhancement when OpenAI adds reasoning content
+        # or for custom backends that do provide it
+        return None
 
     def _process_input_data(
         self,
@@ -88,7 +105,7 @@ class OpenAILLMBackend(BaseLLMBackend):
             else:
                 # BaseModel
                 json_schema = base_model.model_json_schema()
-                # Force additionalProperties to be False 
+                # Force additionalProperties to be False
                 json_schema["additionalProperties"] = False
                 if guided_decode_config.use_list:
                     json_schema = {"type": "array", "items": json_schema}
@@ -153,6 +170,9 @@ class OpenAILLMBackend(BaseLLMBackend):
         if request_id is None:
             request_id = result.id
 
+        # Extract reasoning using the reasoning parser
+        reasoning = self.reasoning_parser(result)
+
         meta_data = MetaInfo(
             request_id=request_id,
             success=True,
@@ -161,6 +181,7 @@ class OpenAILLMBackend(BaseLLMBackend):
             end_time=finish_time,
             finish_reason=[choice.finish_reason for choice in result.choices],
             usage=result.usage,
+            reasoning=reasoning,
             original_result=result,
         )
         return result_texts, meta_data
