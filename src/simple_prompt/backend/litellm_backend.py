@@ -38,7 +38,8 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         logger=None,
     ):
         assert config is not None, "config must be provided"
-        self.model_name = config.pop("model_name", None)
+        # Use get() instead of pop() to avoid mutating the config
+        self.model_name = config.get("model_name", None)
         assert self.model_name is not None, "model_name must be provided"
         if name is None:
             name = self.model_name
@@ -287,7 +288,10 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                 result = future.result()
                 return result
             except Exception as e:
-                return self._process_exception(e, request_id=request_id)
+                start = time.time()
+                return self._process_exception(
+                    e, request_id=request_id, start_time=start
+                )
         else:
             return self._chat_in_main_thread(
                 messages=messages,
@@ -303,7 +307,10 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         generation_config: dict | None = None,
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> "Generator[raw_output_type|exception_output_type]":
-        generation_config = generation_config or {}
+        # Create a copy to avoid mutating the original generation_config
+        generation_config = (
+            copy.deepcopy(generation_config) if generation_config else {}
+        )
         generation_config["stream"] = True
 
         if guided_decode_config:
@@ -337,7 +344,8 @@ class LiteLLMLLMBackend(BaseLLMBackend):
             for response in future.result():
                 yield response
         except Exception as e:
-            yield self._process_exception(e, request_id=request_id)
+            start = time.time()
+            yield self._process_exception(e, request_id=request_id, start_time=start)
 
     def chat_in_thread(
         self,
@@ -346,7 +354,10 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         generation_config: dict | None = None,
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> "Future[output_type|exception_output_type]":
-        generation_config = generation_config or {}
+        # Create a copy to avoid mutating the original generation_config
+        generation_config = (
+            copy.deepcopy(generation_config) if generation_config else {}
+        )
         generation_config["stream"] = False
 
         def chat_wrapper() -> "raw_output_type | output_type | exception_output_type":
@@ -397,7 +408,10 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         generation_config: dict | None = None,
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> "output_type|exception_output_type":
-        generation_config = generation_config or {}
+        # Create a copy to avoid mutating the original generation_config
+        generation_config = (
+            copy.deepcopy(generation_config) if generation_config else {}
+        )
         generation_config["stream"] = False
         litellm_input = self._process_input_data(
             messages, generation_config, guided_decode_config
@@ -441,7 +455,10 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         generation_config: dict | None = None,
         guided_decode_config: GuidedDecodeConfig | None = None,
     ):
-        generation_config = generation_config or {}
+        # Create a copy to avoid mutating the original generation_config
+        generation_config = (
+            copy.deepcopy(generation_config) if generation_config else {}
+        )
         generation_config["stream"] = True
 
         if guided_decode_config:
@@ -470,4 +487,4 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                 )
                 yield res, meta
         except Exception as e:
-            yield self._process_exception(e, request_id=request_id)
+            yield self._process_exception(e, request_id=request_id, start_time=start)
