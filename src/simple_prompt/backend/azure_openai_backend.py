@@ -35,6 +35,8 @@ class AzureOpenAILLMBackend(OpenAILLMBackend):
         if name is None:
             name = self.model_name
 
+        # Call BaseLLMBackend.__init__ (skipping OpenAILLMBackend.__init__)
+        # because we need to initialize with AzureOpenAI client instead of OpenAI
         super(OpenAILLMBackend, self).__init__(
             name=name,
             concurrency=concurrency,

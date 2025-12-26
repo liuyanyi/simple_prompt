@@ -5,13 +5,15 @@ This example shows how to implement and use a custom reasoning parser
 to extract reasoning content from LLM responses.
 """
 
+from typing import List
+
 from simple_prompt.backend import OpenAILLMBackend
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 
 
 def custom_reasoning_parser(
     result: ChatCompletion | ChatCompletionChunk,
-) -> str | list[str] | None:
+) -> str | List[str] | None:
     """
     Custom reasoning parser example.
 
@@ -26,7 +28,10 @@ def custom_reasoning_parser(
     """
     # Check if reasoning tokens are present in the usage
     if result.usage and result.usage.completion_tokens_details:
-        reasoning_tokens = result.usage.completion_tokens_details.reasoning_tokens
+        # Safely access reasoning_tokens attribute
+        reasoning_tokens = getattr(
+            result.usage.completion_tokens_details, "reasoning_tokens", None
+        )
         if reasoning_tokens and reasoning_tokens > 0:
             return f"Reasoning tokens used: {reasoning_tokens}"
 
