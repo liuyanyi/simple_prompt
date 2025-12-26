@@ -235,6 +235,7 @@ class LiteLLMLLMBackend(BaseLLMBackend):
         generation_config: dict | None = None,
         guided_decode_config: GuidedDecodeConfig | None = None,
     ) -> "output_type":
+        start = time.time()
         try:
             litellm_input = self._process_input_data(
                 messages, generation_config, guided_decode_config
@@ -244,7 +245,6 @@ class LiteLLMLLMBackend(BaseLLMBackend):
                 post_processor = self._build_guided_decode_post_processor(
                     guided_decode_config
                 )
-            start = time.time()
 
             # Prepare kwargs for LiteLLM
             kwargs = {
