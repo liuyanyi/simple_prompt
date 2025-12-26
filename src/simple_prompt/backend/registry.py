@@ -4,6 +4,7 @@ from typing import Dict, List, Type, Optional
 from .base import BaseLLMBackend, LLMBackendHook
 from .openai_backend import OpenAILLMBackend
 from .vllm_backend import vLLMBackend
+from .litellm_backend import LiteLLMLLMBackend
 from .exception import NotRegisteredBackendError
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 _registry: Dict[str, Type[BaseLLMBackend]] = {
     "openai": OpenAILLMBackend,
     "vllm": vLLMBackend,
+    "litellm": LiteLLMLLMBackend,
 }
 
 
