@@ -1,4 +1,4 @@
-from typing import List, ParamSpec, Tuple, TypeVar, Union
+from typing import Callable, List, ParamSpec, Tuple, TypeVar, Union
 
 from openai.types import CompletionUsage
 from openai.types.chat import (
@@ -19,6 +19,7 @@ class MetaInfo(BaseModel):
     finish_reason: List[str | None] = Field(default_factory=list)
     usage: CompletionUsage | None = None
     error: str | None = None
+    reasoning: str | List[str] | None = None
     original_result: ChatCompletion | ChatCompletionChunk | None = None
 
     def __str__(self) -> str:
@@ -28,6 +29,8 @@ class MetaInfo(BaseModel):
         repr_str += f"model: {self.model}\n"
         repr_str += f"finish_reason: {self.finish_reason}\n"
         repr_str += f"usage: {self.usage}\n"
+        if self.reasoning:
+            repr_str += f"reasoning: {self.reasoning}\n"
         if self.error:
             repr_str += f"error: {self.error}\n"
         return repr_str
@@ -67,3 +70,9 @@ class GuidedDecodeConfig(BaseModel):
 
     # 允许用户自定义的参数
     model_config = ConfigDict(extra="allow")
+
+
+# Reasoning parser type: a callable that takes the original result and returns reasoning content
+ReasoningParser = Callable[
+    [ChatCompletion | ChatCompletionChunk], str | List[str] | None
+]

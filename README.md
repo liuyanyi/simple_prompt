@@ -46,6 +46,55 @@ result, meta = translate(text="I want to learn AI", target_language="Chinese").e
 print(result)
 ```
 
+## Reasoning Support
+
+The library now supports extracting reasoning information from LLM responses. This is useful for models that provide reasoning content separately (like some endpoints) or when you want to parse reasoning from the response.
+
+### Basic Usage
+
+The `MetaInfo` object returned by the backend now includes a `reasoning` field:
+
+```python
+result, meta = translate(text="I want to learn AI", target_language="Chinese").execute()
+
+print(result)  # The completion/response
+print(meta.reasoning)  # The reasoning content (if available)
+```
+
+### Custom Reasoning Parser
+
+You can provide a custom reasoning parser to extract reasoning from responses:
+
+```python
+from simple_prompt.protocol import ReasoningParser
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
+
+def my_reasoning_parser(result: ChatCompletion | ChatCompletionChunk) -> str | list[str] | None:
+    # Extract reasoning from usage statistics
+    if result.usage and result.usage.completion_tokens_details:
+        reasoning_tokens = result.usage.completion_tokens_details.reasoning_tokens
+        if reasoning_tokens and reasoning_tokens > 0:
+            return f"Used {reasoning_tokens} reasoning tokens"
+    
+    # Or parse from content with custom logic
+    # For example, extract text between <reasoning> tags
+    # ...
+    
+    return None
+
+backend = OpenAILLMBackend(
+    name="gpt-4-reasoning",
+    config={
+        "model_name": "gpt-4",
+        "api_key": "sk-*",
+        "base_url": "https://api.openai.com/v1",
+    },
+    reasoning_parser=my_reasoning_parser,  # Use custom parser
+)
+```
+
+See `example_custom_reasoning_parser.py` for a complete example.
+
 ## Future Work
 
 - [ ] LiteLLM Backend for all kinds of LLM models
