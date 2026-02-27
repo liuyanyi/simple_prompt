@@ -302,6 +302,29 @@ class PromptDispatcher(ExecutorMixin):
             request_id=request_id,
         )
 
+    async def async_execute(self, request_id: str | None = None):
+        """异步调用模型，并返回结果和元信息"""
+        executor = self._get_configured_executor()
+        return await executor.async_execute(request_id=request_id)
+
+    async def async_parse(
+        self,
+        base_model: Type[GuidedBaseModel] | dict,
+        use_list: bool = False,
+        request_id: str | None = None,
+    ):
+        """异步调用模型，并解析结果为给定的BaseModel类型"""
+        executor = self._get_configured_executor()
+        return await executor.async_parse(
+            base_model=base_model, use_list=use_list, request_id=request_id
+        )
+
+    async def async_stream(self, request_id: str | None = None):
+        """异步流式调用模型"""
+        executor = self._get_configured_executor()
+        async for response in executor.async_stream(request_id=request_id):
+            yield response
+
     def execute_in_future(
         self, request_id: str | None = None
     ) -> Future[Tuple[str, MetaInfo]]:
