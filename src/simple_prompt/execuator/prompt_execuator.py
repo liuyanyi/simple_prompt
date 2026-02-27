@@ -163,6 +163,20 @@ class PromptExecutor(ExecutorMixin):
         )
         return result
 
+    async def async_execute(self, request_id: str | None = None) -> output_type[str]:
+        """异步调用模型"""
+        request_id, messages, sampling_params, _ = self._prepare_input(
+            request_id=request_id
+        )
+
+        result = await self.backend.async_chat(
+            messages=messages,
+            request_id=request_id,
+            generation_config=sampling_params,
+            guided_decode_config=None,
+        )
+        return result
+
     @overload
     def parse(
         self,
@@ -303,6 +317,38 @@ class PromptExecutor(ExecutorMixin):
         )
 
         result = self.backend.chat(
+            messages=messages,
+            request_id=request_id,
+            generation_config=sampling_params,
+            guided_decode_config=guided_decode_config,
+        )
+        return result
+
+    async def async_parse(
+        self,
+        base_model: Type[GuidedBaseModel] | dict | None = None,
+        use_list: bool = False,
+        request_id: str | None = None,
+    ):
+        """异步调用模型，并解析结果为给定的BaseModel类型，返回结果和元信息"""
+        if base_model is None:
+            base_model = self.default_parse_model
+
+        if not isinstance(base_model, (Type, dict)):
+            raise TypeError(
+                "base_model must be a Type[GuidedBaseModel] or a dict (JSON schema)"
+            )
+
+        if isinstance(base_model, type) and not issubclass(base_model, BaseModel):
+            raise TypeError("Type [GuidedBaseModel] must be a subclass of BaseModel")
+
+        request_id, messages, sampling_params, guided_decode_config = (
+            self._prepare_input(
+                base_model=base_model, use_list=use_list, request_id=request_id
+            )
+        )
+
+        result = await self.backend.async_chat(
             messages=messages,
             request_id=request_id,
             generation_config=sampling_params,

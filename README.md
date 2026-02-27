@@ -44,6 +44,16 @@ set_default_backend("vllm")
 result, meta = translate(text="I want to learn AI", target_language="Chinese").execute()
 
 print(result)
+
+# Async 调用
+
+```python
+async def main():
+    result, meta = await translate(
+        text="I want to learn AI", target_language="Chinese"
+    ).async_execute()
+    print(result)
+```
 ```
 
 ## Future Work
@@ -59,4 +69,3 @@ print(result)
 ## 许可证
 
 Apache-2.0 License
-
